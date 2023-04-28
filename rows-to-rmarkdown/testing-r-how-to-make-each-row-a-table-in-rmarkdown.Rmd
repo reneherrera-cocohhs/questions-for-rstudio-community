@@ -1,0 +1,77 @@
+---
+title: "how-to-make-each-row-of-a-data-table-into-its-own-table-as-part-of-a-series-of-tables-in-an-rmarkdown-document"
+author: "rene_at_coco"
+date: "5/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+library(tibble)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(gt)
+library(purrr)
+library(knitr)
+```
+
+```{r data}
+# this is how my data looks, except I have many more variables
+my_data <- tibble(
+  id = c("001", "002", "003", "004"),
+  color = c("red", "yellow", "blue", "violet"),
+  fruit = c("apple", "banana", "blueberry", "plum"),
+  animal = c("dog", "cat", "bird", "fish"),
+  description = c("adorable", "curious", "bewildered", "dull")
+)
+```
+
+```{r solution-gt}
+# an almost solution using group_by and gt
+my_data %>% 
+  mutate(id = str_c("id_", id)) %>%
+  pivot_longer(cols = -id, names_to = "Variable", values_to = "Value") %>%
+  group_by(id) %>%
+  gt()
+```
+
+```{r solution-walk}
+my_data_long <- my_data %>% pivot_longer(cols = -id, names_to = "variable", values_to = "Val") 
+IDs <- unique(my_data$id)
+MyFunc <- function(ID) {
+  tmp <- my_data_long %>% filter( id == ID) %>% select(-id)
+  colnames(tmp)[2] <- ID
+  assign(paste("My_target_data_id", ID, sep = "_"), tmp,  envir = .GlobalEnv)
+  print(kable(tmp))
+}
+walk(IDs, MyFunc)
+# ls()
+```
+
+```{r solution-map}
+ls1 <- my_data %>% group_by(id) %>% group_split() %>% map(
+  ~.x %>% pivot_longer(-id, names_to = 'vars',values_to = 'vals') %>% 
+    pivot_wider(names_from = 'id',values_from = 'vals')
+) 
+ls1
+
+for(x in ls1) {
+  assign(x = str_glue('my_target_data_id_{names(x) %>% tail(1)}'),value = x)
+}
+```
+
+```{r solution-map-gt}
+my_data %>% 
+  mutate(Variable = id) %>% 
+  group_split(id) %>% 
+  map_dfr(
+    ~ .x %>% 
+      pivot_longer(-id, names_to = 'vars',values_to = 'vals') %>% 
+      arrange(desc(vars))) %>% 
+  select(-id) %>% 
+  gt()
+```
